@@ -1,0 +1,50 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: kitchen
+      RABBITMQ_DEFAULT_PASS: kitchen
+    ports:
+      - "127.0.0.1:${BROKER_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    environment: &environment
+      AMQP_URL: amqp://kitchen:kitchen@rabbitmq:5672/%2F
+      CONTROL_URL: http://api:8000/api/control
+      SUPERVISOR_URL: http://worker-host:8001
+      BROKER_HTTP: http://rabbitmq:15672
+      LAB_DB: /data/kitchen.sqlite
+    volumes:
+      - lab-data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  worker-host:
+    build: .
+    command: ["uvicorn", "supervisor:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1", "--no-access-log"]
+    environment: *environment
+    volumes:
+      - lab-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/workers', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  lab-data:

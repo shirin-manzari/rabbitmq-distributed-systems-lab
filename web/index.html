@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f4e9" />
+    <title>Distributed Kitchen · RabbitMQ Lab</title>
+    <meta
+      name="description"
+      content="A classroom pizza-factory conveyor with real RabbitMQ workers for preparation, parallel baking, and packaging."
+    />
+    <link rel="stylesheet" href="style.css?v=cleanup" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">🍕</span>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <h1>Distributed Kitchen</h1>
+        </div>
+        <div class="controls" role="group" aria-label="Kitchen controls">
+          <button disabled title="Available when the backend is connected">
+            ＋ Add order</button
+          ><button
+            class="batch"
+            disabled
+            title="Available when the backend is connected"
+          >
+            +20 orders</button
+          ><button
+            class="pause"
+            disabled
+            title="Available when the backend is connected"
+          >
+            Ⅱ Pause
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <p id="connection-notice" role="status">Connecting…</p>
+        <p id="worker-notice" role="status" aria-live="polite"></p>
+        <p id="request-notice" role="status" aria-live="polite"></p>
+        <section class="floor" aria-label="Pizza preparation conveyor">
+          <div
+            class="scene-scroll"
+            role="region"
+            tabindex="0"
+            aria-label="Kitchen scene. Scroll horizontally on small screens."
+          >
+            <div class="scene">
+              <div class="stage-label orders-label"><span>01</span> ORDERS</div>
+              <div class="stage-label prep-label"><span>02</span> PREP</div>
+              <div class="stage-label bake-label"><span>03</span> BAKE</div>
+              <div class="stage-label pack-label"><span>04</span> PACK</div>
+              <div class="stage-label ready-label"><span>05</span> READY</div>
+              <div class="stage-rule rule-one"></div>
+              <div class="stage-rule rule-two"></div>
+              <div class="stage-rule rule-three"></div>
+              <div class="stage-rule rule-four"></div>
+
+              <div class="belt inlet-belt"><div class="tread"></div></div>
+              <div class="belt split-belt"></div>
+              <div class="belt upper-belt"><div class="tread"></div></div>
+              <div class="belt lower-belt"><div class="tread"></div></div>
+              <div class="belt merge-belt"></div>
+              <div class="belt outlet-belt"><div class="tread"></div></div>
+              <div class="belt-leg leg-one"></div>
+              <div class="belt-leg leg-two"></div>
+              <div class="belt-leg leg-three"></div>
+              <div class="belt-leg leg-four"></div>
+
+              <div class="inlet" aria-hidden="true">📋</div>
+              <div class="station prep-station">
+                <div class="station-top">
+                  <span>PREP 1</span><span class="station-light"></span>
+                </div>
+                <div class="station-face">
+                  <span class="chef" aria-hidden="true">👨‍🍳</span>
+                  <span class="station-status" id="prep-order">Idle</span>
+                </div>
+                <div
+                  class="estimate"
+                  title="Static time estimate; does not indicate completion"
+                >
+                  <span></span>
+                </div>
+                <div class="station-feet"></div>
+              </div>
+
+              <div class="queue-label">SHARED QUEUE <span>↗ ↘</span></div>
+              <div class="worker-label baker-one-label">
+                BAKER 1 <span>8s / pizza</span>
+              </div>
+              <div class="station oven oven-one">
+                <span class="station-staff" aria-hidden="true">🧑‍🍳</span>
+                <div class="oven-window">
+                  <span aria-hidden="true">🔥</span
+                  ><span id="baker-1-order">Idle</span>
+                </div>
+                <div class="oven-controls"><i></i><i></i><span>01</span></div>
+              </div>
+              <div class="worker-label baker-two-label">
+                BAKER 2 <span>8s / pizza</span>
+              </div>
+              <div class="station oven oven-two">
+                <span class="station-staff" aria-hidden="true">🧑‍🍳</span>
+                <div class="oven-window">
+                  <span aria-hidden="true">🔥</span
+                  ><span id="baker-2-order">Idle</span>
+                </div>
+                <div class="oven-controls"><i></i><i></i><span>02</span></div>
+              </div>
+
+              <div class="station pack-station">
+                <div class="station-top">
+                  <span>PACK 1</span><span class="station-light"></span>
+                </div>
+                <div class="station-face">
+                  <span class="chef" aria-hidden="true">👩‍🍳</span>
+                  <span class="station-status" id="pack-order">Idle</span>
+                </div>
+                <div
+                  class="estimate"
+                  title="Static time estimate; does not indicate completion"
+                >
+                  <span></span>
+                </div>
+                <div class="station-feet"></div>
+              </div>
+              <div class="ready-stop" aria-hidden="true"></div>
+              <div class="station-caption prep-caption">
+                <span>2s / pizza</span>
+              </div>
+              <div class="station-caption pack-caption">
+                <span>2s / pizza</span>
+              </div>
+              <div class="waiting-badge waiting-prepare" id="waiting-prepare" title="Application orders waiting for preparation">Waiting: 0</div>
+              <div class="waiting-badge waiting-bake" id="waiting-bake" title="Application orders sharing the baking queue">Waiting: 0</div>
+              <div class="waiting-badge waiting-pack" id="waiting-pack" title="Application orders waiting for packaging">Waiting: 0</div>
+              <div id="trays" aria-label="Orders on the conveyor"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="order-board" tabindex="0" aria-label="Order summary. Scroll horizontally on small screens.">
+          <article class="order-column queued">
+            <div class="counter">
+              <div>
+                <span class="counter-icon" aria-hidden="true">📋</span>
+                <h2>Queued</h2>
+              </div>
+              <strong id="queued-count">0</strong>
+            </div>
+            <div class="list-header">
+              <span>ORDER</span><span>NEXT STOP</span>
+            </div>
+            <ul id="queued-list" aria-label="Queued orders"></ul>
+          </article>
+          <article class="order-column cooking">
+            <div class="counter">
+              <div>
+                <span class="counter-icon" aria-hidden="true">🍕</span>
+                <h2
+                  title="All active stages: preparation, baking, and packaging"
+                >
+                  Cooking
+                </h2>
+              </div>
+              <strong id="cooking-count">0</strong>
+            </div>
+            <div class="list-header">
+              <span>ORDER</span><span>STATION</span>
+            </div>
+            <ul id="cooking-list" aria-label="Cooking orders"></ul>
+          </article>
+          <article class="order-column ready">
+            <div class="counter">
+              <div>
+                <span class="counter-icon" aria-hidden="true">📦</span>
+                <h2>Ready</h2>
+              </div>
+              <strong id="ready-count">0</strong>
+            </div>
+            <div class="list-header"><span>ORDER</span><span>STATUS</span></div>
+            <ul id="ready-list" aria-label="Ready orders"></ul>
+          </article>
+          <article
+            class="order-column failed"
+            aria-label="Rejected orders outside the conveyor"
+          >
+            <div class="counter">
+              <div>
+                <span class="counter-icon" aria-hidden="true">🗑</span>
+                <h2>Failed</h2>
+              </div>
+              <strong id="failed-count">0</strong>
+            </div>
+            <div class="list-header"><span>ORDER</span><span>STATUS</span></div>
+            <ul id="failed-list" aria-label="Failed orders"></ul>
+          </article>
+        </section>
+        <details class="bench" id="experiment-bench">
+          <summary><h2>🧪 Instructor controls</h2></summary>
+          <div class="bench-top">
+            <label
+              >Orders
+              <select id="order-kind">
+                <option value="none">Valid</option>
+                <option value="transient">Transient failure</option>
+                <option value="invalid">
+                  Invalid
+                </option>
+              </select></label
+            >
+            <label title="Skip repeated stage effects; applies to newly started tasks"
+              ><input type="checkbox" id="idempotency-mode" disabled /> Idempotency</label
+            >
+            <button id="reset-demo" class="danger" disabled>Reset demo</button>
+          </div>
+          <div id="stage-controls" class="stage-controls"></div>
+          <p id="effect-totals" class="bench-note" title="Durable recorded effects; repeated effects remain counted when idempotency is off">
+            Durable recorded stage effects: waiting for live state.
+          </p>
+          <details class="metrics" aria-label="Actual RabbitMQ queue metrics">
+            <summary>
+              RabbitMQ metrics
+              <span id="metrics-status">Not connected</span>
+            </summary>
+            <p>
+              Broker messages, not pizza totals. Samples may lag.
+            </p>
+            <div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+              <table aria-label="RabbitMQ queue statistics">
+                <thead>
+                  <tr>
+                    <th scope="col">Queue</th>
+                    <th scope="col">Ready messages</th>
+                    <th scope="col">Unacknowledged</th>
+                    <th scope="col" title="Consumer subscriptions; polling workers can process work with zero subscriptions">Subscriptions</th>
+                  </tr>
+                </thead>
+                <tbody id="metrics-rows"></tbody>
+              </table>
+            </div>
+          </details>
+        </details>
+      </main>
+    </div>
+    <dialog id="order-history" aria-labelledby="history-title">
+      <div class="dialog-top">
+        <h2 id="history-title">Order timeline</h2>
+        <button id="close-history">Close</button>
+      </div>
+      <p id="history-effects"></p>
+      <div class="replay-controls">
+        <label
+          >Repeat stage
+          <select id="repeat-stage">
+            <option value="prepare">Preparation</option>
+            <option value="bake">Baking</option>
+            <option value="pack">Packaging</option>
+          </select></label
+        ><button id="repeat-order" title="Repeat this stage through RabbitMQ. The card stays Ready; the timeline records each attempt. ACK sent events are unconfirmed worker reports." disabled>Request real redelivery</button>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+        <table aria-label="Order events">
+          <thead>
+            <tr>
+              <th scope="col">Attempt</th>
+              <th scope="col">Time</th>
+              <th scope="col">Stage / worker</th>
+              <th scope="col">Event</th>
+              <th scope="col">Evidence</th>
+            </tr>
+          </thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+      </div>
+    </dialog>
+  </body>
+</html>

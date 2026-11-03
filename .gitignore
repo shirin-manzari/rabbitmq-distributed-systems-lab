@@ -1,0 +1,14 @@
+.DS_Store
+/.local-projects/
+.venv/
+__pycache__/
+*.pyc
+.data/
+artifacts/
+AGENTS.md
+PLAN.md
+PROGRESS.md
+README.md
+FEATURES.md
+INSTRUCTOR_GUIDE.md
+/tests
