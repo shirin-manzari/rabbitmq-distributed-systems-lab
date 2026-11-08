@@ -1,0 +1,21 @@
+name: rabbitmq-image-resizer
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: resizer
+      RABBITMQ_DEFAULT_PASS: resizer
+    ports:
+      - "127.0.0.1:${AMQP_PORT:-5673}:5672"
+      - "127.0.0.1:${MANAGEMENT_PORT:-15673}:15672"
+    volumes:
+      - broker-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  broker-data:
