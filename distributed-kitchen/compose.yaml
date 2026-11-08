@@ -1,3 +1,5 @@
+name: rabbitmq-distributed-systems-lab
+
 services:
   rabbitmq:
     image: rabbitmq:4.1-management

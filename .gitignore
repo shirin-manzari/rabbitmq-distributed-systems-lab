@@ -5,10 +5,6 @@ __pycache__/
 *.pyc
 .data/
 artifacts/
-AGENTS.md
-PLAN.md
-PROGRESS.md
-README.md
-FEATURES.md
-INSTRUCTOR_GUIDE.md
-/tests
+*.md
+tests/
+.vscode/
